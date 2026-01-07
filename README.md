@@ -1,0 +1,2 @@
+# Mini-Stratego
+Game
