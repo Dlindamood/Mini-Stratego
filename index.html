@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Capture-the-Flag Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      margin: 0;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      box-sizing: border-box;
+    }
+    h1 {
+      font-size: 1.2rem;
+      text-align: center;
+      margin: 0 0 8px;
+    }
+    .container { max-width: 520px; margin: 0 auto; }
+    .top-panel {
+      background: #222;
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    #gameStatus { font-weight: bold; margin-bottom: 4px; }
+    #capturedSummary {
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: #ffecb3;
+      min-height: 1.1em;
+    }
+    #currentPlayerLabel { font-weight: bold; }
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    select, button, input { font-size: 0.85rem; }
+    button {
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      background: #4caf50;
+      color: #fff;
+    }
+    button:disabled { background: #555; cursor: default; }
+
+    #pieceCounts { display: none; }
+
+    .board-wrapper {
+      background: #222;
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 2px;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+    }
+    .cell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 4px;
+      box-sizing: border-box;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+
+    .cell.empty.light { background: #e0e0d0; }
+    .cell.empty.dark  { background: #c0c0a0; }
+    .cell.tree { background: #2f6f2f; }
+
+    .coords {
+      opacity: 0.7;
+      font-size: 0.6rem;
+      position: absolute;
+      top: 2px;
+      left: 3px;
+      z-index: 2;
+      pointer-events: none;
+      text-shadow: 0 0 2px #000;
+    }
+    .cell span.icon {
+      font-size: 1.3rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .micro-grid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      border-radius: 4px;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .micro { width: 100%; height: 100%; pointer-events: none; }
+    .micro.water        { background: #2b6de0; }
+    .micro.shore        { background: #c0c0a0; }
+    .micro.bridge-plank { background: #e0b070; }
+
+    .piece {
+      position: absolute;
+      inset: 10%;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: bold;
+      color: #fff;
+      z-index: 3;
+      box-shadow: 0 0 4px rgba(0,0,0,0.7);
+      pointer-events: none;
+    }
+    .piece.P1 { background: #1565c0; }
+    .piece.P2 { background: #b71c1c; }
+    .piece-flag { background: #ffa000; }
+    .piece-bomb { background: #424242; }
+
+    .bridge-icon {
+      position: absolute;
+      z-index: 3;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #4b2c09;
+      pointer-events: none;
+    }
+
+    .board-rotated { transform: rotate(180deg); }
+    .board-rotated .piece,
+    .board-rotated .coords,
+    .board-rotated .bridge-icon,
+    .board-rotated .icon { transform: rotate(180deg); }
+
+    .cell.selected {
+      outline: 3px solid #ffeb3b;
+      box-shadow: 0 0 8px rgba(255,235,59,0.8);
+    }
+    .cell.last-move-from {
+      outline: 3px solid #ff9800;
+      box-shadow: 0 0 6px rgba(255, 152, 0, 0.8);
+    }
+    .cell.last-move-to {
+      outline: 3px solid #00e5ff;
+      box-shadow: 0 0 6px rgba(0, 229, 255, 0.8);
+    }
+
+    .info-panel {
+      margin-top: 8px;
+      font-size: 0.9rem;
+      background: #263238;
+      padding: 6px 8px;
+      border-radius: 6px;
+      min-height: 1.4em;
+      border: 1px solid #ffeb3b;
+      box-shadow: 0 0 6px rgba(255, 235, 59, 0.6);
+    }
+
+    .legend {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .legend-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 1px solid #555;
+      overflow: hidden;
+    }
+    .legend-empty  { background: #c0c0a0; }
+    .legend-tree   { background: #2f6f2f; }
+    .legend-river {
+      background-image: linear-gradient(
+        135deg,
+        #2b6de0 0%,
+        #2b6de0 60%,
+        #c0c0a0 60%,
+        #c0c0a0 100%
+      );
+    }
+    .legend-bridge { background: #e0b070; }
+
+    .special-rules {
+      margin-top: 8px;
+      background: #222;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      line-height: 1.3;
+    }
+    .special-rules-title {
+      font-weight: bold;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+    }
+    .special-rules ul { padding-left: 18px; margin: 2px 0; }
+
+    .effect { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+    .effect.explosion {
+      background:
+        radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,235,59,0.8) 20%, rgba(255,87,34,0.7) 45%, rgba(0,0,0,0) 70%);
+      animation: explode 0.45s ease-out forwards;
+    }
+    @keyframes explode {
+      0%   { transform: scale(0.2); opacity: 1; }
+      80%  { transform: scale(1.4); opacity: 1; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    .effect.spy-convert {
+      border-radius: 50%;
+      margin: 20%;
+      background:
+        radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,235,59,0.8) 30%, rgba(0,0,0,0) 70%);
+      animation: spyWink 0.6s ease-out forwards;
+      box-shadow: 0 0 8px rgba(255,235,59,0.9);
+    }
+    @keyframes spyWink {
+      0%   { transform: scale(0.3); opacity: 0; }
+      40%  { transform: scale(1.0); opacity: 1; }
+      100% { transform: scale(1.2); opacity: 0; }
+    }
+
+    /* Lobby */
+    #lobby { margin-bottom: 6px; font-size: 0.85rem; }
+    #lobby input[type="text"] {
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #111;
+      color: #f5f5f5;
+    }
+    #lobbyStatus { font-size: 0.8rem; min-height: 1.2em; }
+    #inGameInfo { font-size: 0.8rem; margin-top: 2px; }
+
+    /* Big warning banner when not hosted */
+    .env-warning {
+      margin: 6px 0 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #ff9800;
+      background: rgba(255,152,0,0.12);
+      color: #ffd59a;
+      font-size: 0.85rem;
+      line-height: 1.25;
+      display: none;
+    }
+    .env-warning strong { color: #ffcc80; }
+    .env-warning code { color: #fff; }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Capture-the-Flag Prototype</h1>
+
+    <div class="top-panel">
+      <div id="envWarning" class="env-warning"></div>
+
+      <!-- Lobby for Firestore multiplayer -->
+      <div id="lobby">
+        <div class="controls-row">
+          <label>
+            Your name:
+            <input type="text" id="playerNameInput" placeholder="Optional" />
+          </label>
+        </div>
+        <div class="controls-row">
+          <button id="createGameBtn">Create Game</button>
+          <span>or join:</span>
+          <input type="text" id="joinGameIdInput" placeholder="Game ID" />
+          <button id="joinGameBtn">Join Game</button>
+        </div>
+        <div id="lobbyStatus"></div>
+        <div id="inGameInfo" style="display:none;">
+          Game ID: <span id="gameIdLabel"></span> · You are <span id="myPlayerLabel"></span>
+        </div>
+      </div>
+
+      <div id="gameStatus">Loading…</div>
+      <div id="capturedSummary"></div>
+
+      <div class="controls-row" id="setupControls">
+        <span>Current player: <span id="currentPlayerLabel">P1</span></span>
+        <label>
+          Piece:
+          <select id="pieceSelect"></select>
+        </label>
+        <button id="finishSetupBtn">Finish this player’s setup</button>
+      </div>
+      <div id="pieceCounts"></div>
+    </div>
+
+    <div class="board-wrapper">
+      <div id="board" class="board"></div>
+    </div>
+
+    <div id="info" class="info-panel">
+      Tap a square to place pieces (setup).
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-swatch legend-empty"></div> Empty / passable
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch legend-river"></div> River (impassable except Marines; Airmen may jump over)
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch legend-bridge"></div> Bridge (passable)
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch legend-tree"></div> Tree (impassable; Airmen may jump over)
+      </div>
+    </div>
+
+    <div class="special-rules">
+      <div class="special-rules-title">Special Rules & Piece Legend</div>
+      <ul>
+        <li><strong>Hidden Pieces:</strong> you only see enemy types after they survive a battle, and they remain visible until the next move.</li>
+        <li><strong>General (G5) – 2 per player:</strong> highest ranking piece.</li>
+        <li><strong>Colonel (C4) – 3 per player:</strong> high ranking officer.</li>
+        <li><strong>Marines (Ma4) – 2 per player:</strong> can move into and through river cells (R).</li>
+        <li><strong>Majors (Mj3) – 3 per player:</strong> defuse bombs; they survive when attacking a bomb.</li>
+        <li><strong>Spies (S3) – 4 per player:</strong> when a Spy attacks a Spy, the defender switches sides (double agent); attacker stays put.</li>
+        <li><strong>Lieutenants (L2) – 4 per player:</strong> low-ranking officers.</li>
+        <li>
+          <strong>Airmen (A1) – 5 per player:</strong>
+          can move any number of squares in a straight line (like a rook),
+          may jump over trees and river cells but cannot land on them,
+          and cannot jump over pieces (risk of enemy or friendly fire).
+        </li>
+        <li><strong>Bombs (B0) – 4 per player:</strong> both pieces are removed on attack, unless attacked by a Major.</li>
+        <li><strong>Flag (F0) – 1 per player:</strong> capture the enemy flag to win.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Firebase (compat SDK for simplicity) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    /*****************************************************************
+     *  FIREBASE INIT (stable + no infinite "authReady" gating)
+     *****************************************************************/
+    const firebaseConfig = {
+      apiKey: "AIzaSyDENUcBZ7QoAvhqKQvOqmg_816Ors6xi5o",
+      authDomain: "mini-stratego.firebaseapp.com",
+      projectId: "mini-stratego",
+      storageBucket: "mini-stratego.firebasestorage.app",
+      messagingSenderId: "537302516864",
+      appId: "1:537302516864:web:a8b95f5b6259e220ea9265",
+      measurementId: "G-13MZRG17ZQ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db   = firebase.firestore();
+
+    const envWarningEl = document.getElementById('envWarning');
+    const lobbyStatusEl = document.getElementById('lobbyStatus');
+    const createGameBtn = document.getElementById('createGameBtn');
+    const joinGameBtn = document.getElementById('joinGameBtn');
+
+    function isHostedHttpsOrLocalhost() {
+      const proto = location.protocol; // 'https:' / 'http:' / 'file:'
+      const host = location.hostname;
+      const isLocal = (host === "localhost" || host === "127.0.0.1");
+      const isHttps = (proto === "https:");
+      return isHttps || isLocal;
+    }
+
+    // Multiplayer is only supported in safe environments (HTTPS / localhost).
+    const multiplayerSupported = isHostedHttpsOrLocalhost();
+
+    if (!multiplayerSupported) {
+      envWarningEl.style.display = "block";
+      envWarningEl.innerHTML =
+        `<strong>Multiplayer disabled in this environment.</strong><br>` +
+        `You appear to be running from <code>${location.protocol}//</code> (often happens when opening an HTML file from email).<br>` +
+        `Firebase Auth + Firestore are unreliable without <strong>HTTPS</strong>. Host this page (GitHub Pages or Firebase Hosting) to enable Create/Join.`;
+      createGameBtn.disabled = true;
+      joinGameBtn.disabled = true;
+      lobbyStatusEl.textContent = "Offline/local mode: multiplayer disabled until hosted on HTTPS.";
+    }
+
+    let currentUser = null;
+    let authBootstrapped = false;
+
+    async function ensureSignedIn() {
+      // If multiplayer is disabled, don't attempt Firebase calls.
+      if (!multiplayerSupported) return null;
+
+      if (auth.currentUser) return auth.currentUser;
+
+      // Try persistence (helps on normal browsers; may fail in odd contexts)
+      try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      } catch (e) {
+        // Not fatal
+        console.warn("Auth persistence not available:", e && e.message);
+      }
+
+      try {
+        const cred = await auth.signInAnonymously();
+        return cred.user;
+      } catch (err) {
+        // Retry once (some Android/webview situations need a second poke)
+        console.warn("Anonymous sign-in failed, retrying once:", err && err.message);
+        await new Promise(r => setTimeout(r, 500));
+        const cred2 = await auth.signInAnonymously();
+        return cred2.user;
+      }
+    }
+
+    auth.onAuthStateChanged(user => {
+      currentUser = user || null;
+      if (!multiplayerSupported) return;
+
+      if (user) {
+        if (!authBootstrapped) {
+          authBootstrapped = true;
+          lobbyStatusEl.textContent = "Connected. You can create or join a game.";
+        }
+      } else {
+        lobbyStatusEl.textContent = "Connecting to Firebase…";
+      }
+    });
+
+    // Kick auth once on load (but never block UI forever)
+    (async () => {
+      if (!multiplayerSupported) return;
+      try {
+        lobbyStatusEl.textContent = "Connecting to Firebase…";
+        await ensureSignedIn();
+      } catch (e) {
+        console.error("Auth bootstrap error:", e);
+        lobbyStatusEl.textContent =
+          "Firebase auth failed in this browser context. Host on HTTPS to fix. (" + (e && e.message ? e.message : "unknown") + ")";
+      }
+    })();
+  </script>
+
+  <script>
+    /*****************************************************************
+     *  TERRAIN: 10x10 board with meandering river, bridges, trees
+     *****************************************************************/
+    const terrainMap = [
+      ['E','E','E','E','E','E','E','E','E','E'],
+      ['E','E','E','E','E','E','E','E','E','E'],
+      ['R','W','T','E','E','E','E','T','E','E'],
+      ['E','B','R','E','E','E','E','E','E','E'],
+      ['E','E','E','R','B','E','E','E','E','E'],
+      ['E','E','E','E','E','B','R','E','E','E'],
+      ['E','E','E','E','E','E','E','R','B','E'],
+      ['E','E','T','E','E','E','E','T','W','R'],
+      ['E','E','E','E','E','E','E','E','E','E'],
+      ['E','E','E','E','E','E','E','E','E','E']
+    ];
+
+    const BOARD_ROWS = 10;
+    const BOARD_COLS = 10;
+    const MICRO = 10;
+
+    const boardEl = document.getElementById('board');
+    const infoEl  = document.getElementById('info');
+    const gameStatusEl = document.getElementById('gameStatus');
+    const capturedSummaryEl = document.getElementById('capturedSummary');
+    const pieceSelectEl = document.getElementById('pieceSelect');
+    const finishSetupBtn = document.getElementById('finishSetupBtn');
+    const pieceCountsEl = document.getElementById('pieceCounts');
+    const currentPlayerLabelEl = document.getElementById('currentPlayerLabel');
+    const setupControlsEl = document.getElementById('setupControls');
+
+    const lobbyEl = document.getElementById('lobby');
+    const playerNameInputEl = document.getElementById('playerNameInput');
+    const joinGameIdInputEl = document.getElementById('joinGameIdInput');
+    const inGameInfoEl = document.getElementById('inGameInfo');
+    const gameIdLabelEl = document.getElementById('gameIdLabel');
+    const myPlayerLabelEl = document.getElementById('myPlayerLabel');
+
+    const colLabels = ['A','B','C','D','E','F','G','H','I','J'];
+
+    let playerNames = { P1: "Player 1", P2: "Player 2" };
+
+    function updateBoardOrientation() {
+      if (myPlayerId === "P1") boardEl.classList.add("board-rotated");
+      else boardEl.classList.remove("board-rotated");
+    }
+
+    const startCell = { row: 2, col: 0 }; // A3
+    const endCell   = { row: 7, col: 9 }; // J8
+    const startX = (startCell.col + 0.5) * MICRO;
+    const startY = (startCell.row + 0.5) * MICRO;
+    const endX   = (endCell.col + 0.5) * MICRO;
+    const endY   = (endCell.row + 0.5) * MICRO;
+    const lineDX = endX - startX;
+    const lineDY = endY - startY;
+    const lineLen = Math.sqrt(lineDX * lineDX + lineDY * lineDY) || 1;
+    const RIVER_HALF_WIDTH  = 2.0;
+    const MEANDER_AMPLITUDE = 2.2;
+
+    function clearTemporaryReveals(board) {
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const p = board[r][c];
+          if (p) p.revealed = false;
+        }
+      }
+    }
+
+    function buildMicroGrid(type, macroRow, macroCol) {
+      const grid = document.createElement('div');
+      grid.classList.add('micro-grid');
+
+      for (let mr = 0; mr < MICRO; mr++) {
+        for (let mc = 0; mc < MICRO; mc++) {
+          const micro = document.createElement('div');
+          micro.classList.add('micro');
+
+          const gx = macroCol * MICRO + mc + 0.5;
+          const gy = macroRow * MICRO + mr + 0.5;
+
+          const dx = gx - startX;
+          const dy = gy - startY;
+
+          const u = (dx * lineDX + dy * lineDY) / lineLen;
+          const v = (dx * -lineDY + dy * lineDX) / lineLen;
+
+          let t = u / lineLen;
+          if (t < 0) t = 0;
+          if (t > 1) t = 1;
+
+          const tHalf = t <= 0.5 ? t / 0.5 : (1 - t) / 0.5;
+          const base  = Math.sin(tHalf * Math.PI);
+          const mag   = MEANDER_AMPLITUDE * base;
+          const offset = (t <= 0.5 ? 1 : -1) * mag;
+
+          const vShifted = v - offset;
+          const isInRiverBand = Math.abs(vShifted) <= RIVER_HALF_WIDTH;
+
+          if (type === 'R' || type === 'W') {
+            micro.classList.add(isInRiverBand ? 'water' : 'shore');
+          } else if (type === 'B') {
+            const isBridgeRow = (mr >= 3 && mr <= 6);
+            if (isBridgeRow) micro.classList.add('bridge-plank');
+            else if (isInRiverBand) micro.classList.add('water');
+            else micro.classList.add('shore');
+          }
+
+          grid.appendChild(micro);
+        }
+      }
+      return grid;
+    }
+
+    function buildBoardCells() {
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const t = terrainMap[r][c];
+          const cell = document.createElement('div');
+          cell.classList.add('cell');
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          cell.id = `cell-${r}-${c}`;
+
+          if (t === 'E' || t === 'T' || t === 'W') {
+            cell.classList.add('empty');
+            if ((r + c) % 2 === 0) cell.classList.add('light');
+            else cell.classList.add('dark');
+          }
+
+          if (t === 'R' || t === 'B' || t === 'W') {
+            cell.appendChild(buildMicroGrid(t, r, c));
+          }
+
+          if (t === 'T') {
+            cell.classList.add('tree');
+            const icon = document.createElement('span');
+            icon.classList.add('icon');
+            icon.textContent = '🌳';
+            cell.appendChild(icon);
+          }
+
+          if (t === 'B') {
+            const bIcon = document.createElement('div');
+            bIcon.classList.add('bridge-icon');
+            bIcon.textContent = ')--(';
+            cell.appendChild(bIcon);
+          }
+
+          const coordLabel = document.createElement('div');
+          coordLabel.classList.add('coords');
+          coordLabel.textContent = colLabels[c] + (r + 1);
+          cell.appendChild(coordLabel);
+
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+    buildBoardCells();
+
+    /*****************************************************************
+     *  PIECES & RULE ENGINE
+     *****************************************************************/
+    const PieceType = {
+      FLAG:      "flag",
+      BOMB:      "bomb",
+      MARINE:    "marine",
+      SPY:       "spy",
+      GENERAL:   "general",
+      COLONEL:   "colonel",
+      MAJOR:     "major",
+      LIEUTENANT:"lieutenant",
+      AIRMAN:    "airman"
+    };
+
+    const PIECE_CONFIG = {
+      [PieceType.FLAG]:       { rank: 0, countPerPlayer: 1, canMove: false, label: "F" },
+      [PieceType.BOMB]:       { rank: 0, countPerPlayer: 4, canMove: false, label: "B" },
+      [PieceType.MARINE]:     { rank: 4, countPerPlayer: 2, canMove: true,  label: "Ma" },
+      [PieceType.SPY]:        { rank: 3, countPerPlayer: 4, canMove: true,  label: "S" },
+      [PieceType.GENERAL]:    { rank: 5, countPerPlayer: 2, canMove: true,  label: "G" },
+      [PieceType.COLONEL]:    { rank: 4, countPerPlayer: 3, canMove: true,  label: "C" },
+      [PieceType.MAJOR]:      { rank: 3, countPerPlayer: 3, canMove: true,  label: "Mj" },
+      [PieceType.LIEUTENANT]: { rank: 2, countPerPlayer: 4, canMove: true,  label: "L" },
+      [PieceType.AIRMAN]:     { rank: 1, countPerPlayer: 5, canMove: true,  label: "A" }
+    };
+
+    const PIECE_ORDER = [
+      PieceType.FLAG,
+      PieceType.BOMB,
+      PieceType.GENERAL,
+      PieceType.MARINE,
+      PieceType.COLONEL,
+      PieceType.MAJOR,
+      PieceType.SPY,
+      PieceType.LIEUTENANT,
+      PieceType.AIRMAN
+    ];
+
+    function createPiece(type, ownerId) {
+      const cfg = PIECE_CONFIG[type];
+      return {
+        id: Math.random().toString(36).slice(2),
+        type,
+        rank: cfg.rank,
+        owner: ownerId,
+        revealed: false
+      };
+    }
+
+    let boardPieces = Array.from({ length: BOARD_ROWS }, () =>
+      Array.from({ length: BOARD_COLS }, () => null)
+    );
+
+    let remainingPieces = { P1: {}, P2: {} };
+    for (const type of Object.keys(PIECE_CONFIG)) {
+      const count = PIECE_CONFIG[type].countPerPlayer;
+      remainingPieces.P1[type] = count;
+      remainingPieces.P2[type] = count;
+    }
+
+    function makeEmptyCapturedMap() {
+      const map = {};
+      for (const t of Object.values(PieceType)) map[t] = 0;
+      return map;
+    }
+
+    let capturedBy = { P1: makeEmptyCapturedMap(), P2: makeEmptyCapturedMap() };
+
+    function recordPieceCaptured(captorId, piece) {
+      if (!piece || !captorId) return;
+      if (!capturedBy[captorId]) return;
+      const t = piece.type;
+      if (capturedBy[captorId][t] != null) capturedBy[captorId][t]++;
+    }
+
+    let phase = "setup";
+    let currentPlayer = "P1";
+    let lastMoveFrom = null;
+    let lastMoveTo = null;
+
+    let myPlayerId = "P1";
+    let myPlayerName = "";
+    let selectedCell = null;
+
+    // Firestore multiplayer
+    let gameDocRef = null;
+    let unsubscribeGame = null;
+    let isSyncingFromFirestore = false;
+
+    function inBounds(row, col) {
+      return row >= 0 && row < BOARD_ROWS && col >= 0 && col < BOARD_COLS;
+    }
+
+    function getTerrain(row, col) {
+      return terrainMap[row][col];
+    }
+
+    function isPassableTerrainForPiece(piece, row, col) {
+      const t = getTerrain(row, col);
+      if (t === 'T') return false;
+      if (piece.type === PieceType.MARINE) return true;
+      if (t === 'R') return false;
+      return true;
+    }
+
+    function manhattanDistance(r1, c1, r2, c2) {
+      return Math.abs(r1 - r2) + Math.abs(c1 - c2);
+    }
+
+    function isPathClear(board, fromRow, fromCol, toRow, toCol) {
+      if (fromRow !== toRow && fromCol !== toCol) return false;
+      const dr = Math.sign(toRow - fromRow);
+      const dc = Math.sign(toCol - fromCol);
+      let r = fromRow + dr;
+      let c = fromCol + dc;
+      while (r !== toRow || c !== toCol) {
+        if (board[r][c] !== null) return false;
+        r += dr;
+        c += dc;
+      }
+      return true;
+    }
+
+    function triggerExplosionEffect(row, col) {
+      if (!inBounds(row, col)) return;
+      const cell = document.getElementById(`cell-${row}-${col}`);
+      if (!cell) return;
+      const eff = document.createElement('div');
+      eff.classList.add('effect', 'explosion');
+      cell.appendChild(eff);
+      setTimeout(() => eff.remove(), 500);
+    }
+
+    function triggerSpyConvertEffect(row, col) {
+      if (!inBounds(row, col)) return;
+      const cell = document.getElementById(`cell-${row}-${col}`);
+      if (!cell) return;
+      const eff = document.createElement('div');
+      eff.classList.add('effect', 'spy-convert');
+      cell.appendChild(eff);
+      setTimeout(() => eff.remove(), 600);
+    }
+
+    function canPieceMove(board, piece, fromRow, fromCol, toRow, toCol) {
+      if (!inBounds(toRow, toCol)) return { ok: false, reason: "off-board" };
+      if (!PIECE_CONFIG[piece.type].canMove) return { ok: false, reason: "piece cannot move" };
+      if (fromRow === toRow && fromCol === toCol) return { ok: false, reason: "no move" };
+
+      const dr = toRow - fromRow;
+      const dc = toCol - fromCol;
+      if (dr !== 0 && dc !== 0) return { ok: false, reason: "no diagonals" };
+
+      if (!isPassableTerrainForPiece(piece, toRow, toCol)) return { ok: false, reason: "blocked by terrain" };
+
+      const targetPiece = board[toRow][toCol];
+      if (targetPiece && targetPiece.owner === piece.owner) return { ok: false, reason: "cannot capture own piece" };
+
+      if (piece.type === PieceType.AIRMAN) {
+        if (!isPathClear(board, fromRow, fromCol, toRow, toCol)) return { ok: false, reason: "path blocked by piece" };
+      } else {
+        if (manhattanDistance(fromRow, fromCol, toRow, toCol) !== 1) return { ok: false, reason: "must move 1 square" };
+      }
+      return { ok: true };
+    }
+
+    function resolveCombat(board, attacker, fromRow, fromCol, toRow, toCol) {
+      const defender = board[toRow][toCol];
+
+      if (!defender) {
+        board[toRow][toCol] = attacker;
+        board[fromRow][fromCol] = null;
+        return { board, winnerPlayerId: null };
+      }
+
+      if (defender.type === PieceType.BOMB) {
+        triggerExplosionEffect(toRow, toCol);
+        triggerExplosionEffect(fromRow, fromCol);
+
+        if (attacker.type === PieceType.MAJOR) {
+          attacker.revealed = true;
+          recordPieceCaptured(attacker.owner, defender);
+          board[toRow][toCol] = attacker;
+          board[fromRow][fromCol] = null;
+          return { board, winnerPlayerId: null };
+        } else {
+          recordPieceCaptured(attacker.owner, defender);
+          recordPieceCaptured(defender.owner, attacker);
+          board[toRow][toCol] = null;
+          board[fromRow][fromCol] = null;
+          return { board, winnerPlayerId: null };
+        }
+      }
+
+      if (defender.type === PieceType.FLAG) {
+        attacker.revealed = true;
+        recordPieceCaptured(attacker.owner, defender);
+        board[toRow][toCol] = attacker;
+        board[fromRow][fromCol] = null;
+        return { board, winnerPlayerId: attacker.owner };
+      }
+
+      if (attacker.type === PieceType.SPY && defender.type === PieceType.SPY) {
+        attacker.revealed = true;
+        defender.revealed = true;
+        defender.owner = attacker.owner;
+        board[toRow][toCol] = defender;
+        triggerSpyConvertEffect(toRow, toCol);
+        return { board, winnerPlayerId: null };
+      }
+
+      const aRank = attacker.rank;
+      const dRank = defender.rank;
+      if (aRank >= dRank) {
+        attacker.revealed = true;
+        defender.revealed = true;
+        recordPieceCaptured(attacker.owner, defender);
+        board[toRow][toCol] = attacker;
+        board[fromRow][fromCol] = null;
+        return { board, winnerPlayerId: null };
+      } else {
+        defender.revealed = true;
+        recordPieceCaptured(defender.owner, attacker);
+        board[fromRow][fromCol] = null;
+        return { board, winnerPlayerId: null };
+      }
+    }
+
+    function makeMove(board, currentPlayerId, fromRow, fromCol, toRow, toCol) {
+      if (!inBounds(fromRow, fromCol) || !inBounds(toRow, toCol)) return { ok: false, reason: "out of bounds" };
+      const piece = board[fromRow][fromCol];
+      if (!piece) return { ok: false, reason: "no piece at source" };
+      if (piece.owner !== currentPlayerId) return { ok: false, reason: "not your piece" };
+
+      const check = canPieceMove(board, piece, fromRow, fromCol, toRow, toCol);
+      if (!check.ok) return { ok: false, reason: check.reason };
+
+      clearTemporaryReveals(board);
+
+      const result = resolveCombat(board, piece, fromRow, fromCol, toRow, toCol);
+      return { ok: true, board: result.board, winnerPlayerId: result.winnerPlayerId };
+    }
+
+    /*****************************************************************
+     *  FIRESTORE SYNC HELPERS
+     *****************************************************************/
+    function serializeBoard(board) {
+      const flat = [];
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const p = board[r][c];
+          flat.push(p ? { type: p.type, rank: p.rank, owner: p.owner, revealed: p.revealed } : null);
+        }
+      }
+      return flat;
+    }
+
+    function deserializeBoard(dataBoard) {
+      const board = Array.from({ length: BOARD_ROWS }, () =>
+        Array.from({ length: BOARD_COLS }, () => null)
+      );
+      if (!dataBoard || !Array.isArray(dataBoard)) return board;
+
+      for (let i = 0; i < dataBoard.length; i++) {
+        const r = Math.floor(i / BOARD_COLS);
+        const c = i % BOARD_COLS;
+        const p = dataBoard[i];
+        board[r][c] = p ? { id: Math.random().toString(36).slice(2), ...p } : null;
+      }
+      return board;
+    }
+
+    function syncGameStateToFirestore(extraFields = {}) {
+      if (!gameDocRef || isSyncingFromFirestore) return;
+      const payload = {
+        phase,
+        currentTurn: currentPlayer,
+        board: serializeBoard(boardPieces),
+        remainingPiecesP1: remainingPieces.P1,
+        remainingPiecesP2: remainingPieces.P2,
+        lastMoveFrom: lastMoveFrom || null,
+        lastMoveTo: lastMoveTo || null,
+        capturedByP1: capturedBy.P1,
+        capturedByP2: capturedBy.P2,
+        players: { P1: { name: playerNames.P1 }, P2: { name: playerNames.P2 } },
+        ...extraFields
+      };
+      gameDocRef.update(payload).catch(err => {
+        console.error("Error updating game:", err);
+        lobbyStatusEl.textContent = "Firestore update error: " + err.message;
+      });
+    }
+
+    function applyGameStateFromFirestore(docSnap) {
+      if (!docSnap.exists) return;
+      const data = docSnap.data();
+
+      if (data.players) {
+        if (data.players.P1 && data.players.P1.name) playerNames.P1 = data.players.P1.name;
+        if (data.players.P2 && data.players.P2.name) playerNames.P2 = data.players.P2.name;
+      }
+
+      boardPieces = deserializeBoard(data.board);
+      phase = data.phase || "setup";
+      currentPlayer = data.currentTurn || "P1";
+
+      if (data.remainingPiecesP1) remainingPieces.P1 = data.remainingPiecesP1;
+      if (data.remainingPiecesP2) remainingPieces.P2 = data.remainingPiecesP2;
+
+      if (data.capturedByP1) capturedBy.P1 = data.capturedByP1;
+      if (data.capturedByP2) capturedBy.P2 = data.capturedByP2;
+
+      lastMoveFrom = data.lastMoveFrom || null;
+      lastMoveTo   = data.lastMoveTo || null;
+
+      if (data.winner) {
+        phase = "gameOver";
+        const winnerLabel = playerNames[data.winner] || (data.winner === "P1" ? "Player 1" : "Player 2");
+        gameStatusEl.textContent = `Game over! ${winnerLabel} wins by capturing the flag!`;
+        setupControlsEl.style.display = "none";
+      }
+
+      if (typeof data.statusMessage === "string") infoEl.textContent = data.statusMessage;
+
+      if (myPlayerLabelEl && myPlayerId) {
+        const myName = playerNames[myPlayerId] || (myPlayerId === "P1" ? "Player 1" : "Player 2");
+        myPlayerLabelEl.textContent = `${myName} (${myPlayerId})`;
+      }
+
+      updateStatus();
+      updatePieceSelect();
+      renderBoardPieces();
+      updateLastMoveHighlights();
+    }
+
+    /*****************************************************************
+     *  CREATE / JOIN GAME (now calls ensureSignedIn inside)
+     *****************************************************************/
+    async function createGame() {
+      if (!multiplayerSupported) return;
+
+      try {
+        lobbyStatusEl.textContent = "Connecting…";
+        await ensureSignedIn();
+      } catch (e) {
+        lobbyStatusEl.textContent = "Auth failed. Host on HTTPS to fix. (" + (e && e.message ? e.message : "unknown") + ")";
+        return;
+      }
+
+      myPlayerName = playerNameInputEl.value.trim() || "Player 1";
+      myPlayerId = "P1";
+      playerNames.P1 = myPlayerName;
+      playerNames.P2 = "Player 2";
+
+      const initialState = {
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        phase,
+        currentTurn: currentPlayer,
+        board: serializeBoard(boardPieces),
+        remainingPiecesP1: remainingPieces.P1,
+        remainingPiecesP2: remainingPieces.P2,
+        players: { P1: { name: myPlayerName }, P2: null },
+        winner: null,
+        lastMoveFrom: null,
+        lastMoveTo: null,
+        capturedByP1: capturedBy.P1,
+        capturedByP2: capturedBy.P2,
+        statusMessage: `${myPlayerName}: place your pieces on rows 1–5. Click again on a piece to remove it.`
+      };
+
+      try {
+        const docRef = await db.collection("games").add(initialState);
+        gameDocRef = docRef;
+        lobbyStatusEl.textContent = "Game created. Share this Game ID with your friend.";
+        gameIdLabelEl.textContent = docRef.id;
+        myPlayerLabelEl.textContent = `${playerNames.P1} (P1)`;
+        inGameInfoEl.style.display = "block";
+
+        updateBoardOrientation();
+
+        if (unsubscribeGame) unsubscribeGame();
+        unsubscribeGame = docRef.onSnapshot(snap => {
+          isSyncingFromFirestore = true;
+          applyGameStateFromFirestore(snap);
+          isSyncingFromFirestore = false;
+        });
+      } catch (err) {
+        console.error(err);
+        lobbyStatusEl.textContent = "Error creating game: " + err.message;
+      }
+    }
+
+    async function joinGame() {
+      if (!multiplayerSupported) return;
+
+      const id = joinGameIdInputEl.value.trim();
+      if (!id) {
+        lobbyStatusEl.textContent = "Enter a Game ID to join.";
+        return;
+      }
+
+      try {
+        lobbyStatusEl.textContent = "Connecting…";
+        await ensureSignedIn();
+      } catch (e) {
+        lobbyStatusEl.textContent = "Auth failed. Host on HTTPS to fix. (" + (e && e.message ? e.message : "unknown") + ")";
+        return;
+      }
+
+      myPlayerName = playerNameInputEl.value.trim() || "Player 2";
+
+      try {
+        const docRef = db.collection("games").doc(id);
+        const snap = await docRef.get();
+        if (!snap.exists) {
+          lobbyStatusEl.textContent = "No game found with that ID.";
+          return;
+        }
+        const data = snap.data();
+        if (!data.players || data.players.P2) {
+          lobbyStatusEl.textContent = "Game is full or not joinable.";
+          return;
+        }
+
+        if (data.players && data.players.P1 && data.players.P1.name) playerNames.P1 = data.players.P1.name;
+        else playerNames.P1 = "Player 1";
+        playerNames.P2 = myPlayerName;
+
+        await docRef.update({ "players.P2": { name: myPlayerName } });
+
+        myPlayerId = "P2";
+        gameDocRef = docRef;
+        gameIdLabelEl.textContent = id;
+        myPlayerLabelEl.textContent = `${playerNames.P2} (P2)`;
+        inGameInfoEl.style.display = "block";
+        updateBoardOrientation();
+
+        lobbyStatusEl.textContent = "Joined game. Waiting for host's moves.";
+
+        if (unsubscribeGame) unsubscribeGame();
+        unsubscribeGame = docRef.onSnapshot(snap2 => {
+          isSyncingFromFirestore = true;
+          applyGameStateFromFirestore(snap2);
+          isSyncingFromFirestore = false;
+        });
+      } catch (err) {
+        console.error(err);
+        lobbyStatusEl.textContent = "Error joining game: " + err.message;
+      }
+    }
+
+    createGameBtn.addEventListener('click', () => {
+      lobbyStatusEl.textContent = multiplayerSupported ? "Creating game..." : "Multiplayer disabled (not hosted).";
+      createGame();
+    });
+
+    joinGameBtn.addEventListener('click', () => {
+      lobbyStatusEl.textContent = multiplayerSupported ? "Joining game..." : "Multiplayer disabled (not hosted).";
+      joinGame();
+    });
+
+    /*****************************************************************
+     *  UI: SETUP, RENDERING, CLICK HANDLING
+     *****************************************************************/
+    function renderBoardPieces() {
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const cell = document.getElementById(`cell-${r}-${c}`);
+          const old = cell.querySelector('.piece');
+          if (old) old.remove();
+
+          const piece = boardPieces[r][c];
+          if (!piece) continue;
+
+          if (phase === "setup" && piece.owner !== myPlayerId) continue;
+
+          const cfg = PIECE_CONFIG[piece.type];
+          const span = document.createElement('div');
+          span.classList.add('piece', piece.owner);
+          if (piece.type === PieceType.FLAG) span.classList.add('piece-flag');
+          if (piece.type === PieceType.BOMB) span.classList.add('piece-bomb');
+
+          const isOwner = (piece.owner === myPlayerId);
+          const showIdentity = isOwner || piece.revealed;
+
+          span.textContent = showIdentity ? (cfg.label + cfg.rank) : "??";
+          cell.appendChild(span);
+        }
+      }
+    }
+
+    function updateCapturedSummary() {
+      const myCaptures = capturedBy[myPlayerId];
+      if (!myCaptures) { capturedSummaryEl.textContent = ""; return; }
+
+      const parts = [];
+      for (const type of PIECE_ORDER) {
+        const count = myCaptures[type];
+        if (count > 0) {
+          const cfg = PIECE_CONFIG[type];
+          const label = cfg.label + cfg.rank;
+          parts.push(`${label}×${count}`);
+        }
+      }
+
+      capturedSummaryEl.textContent =
+        parts.length === 0
+          ? "Pieces you have captured: none yet."
+          : "Pieces you have captured: " + parts.join(", ");
+    }
+
+    function updateStatus() {
+      const currentName = playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
+
+      if (phase === "setup") gameStatusEl.textContent = `Setup: ${currentName} — place your pieces on your side.`;
+      else if (phase === "play") gameStatusEl.textContent = `Play: ${currentName}'s turn.`;
+
+      currentPlayerLabelEl.textContent = currentName;
+      updateCapturedSummary();
+    }
+
+    function updatePieceSelect() {
+      const rem = remainingPieces[currentPlayer];
+      const prev = pieceSelectEl.value;
+
+      pieceSelectEl.innerHTML = "";
+      for (const type of PIECE_ORDER) {
+        const cfg = PIECE_CONFIG[type];
+        const left = rem[type];
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = `${cfg.label}${cfg.rank} — ${type} (${left} left)`;
+        pieceSelectEl.appendChild(option);
+      }
+
+      if (prev && rem[prev] != null && rem[prev] > 0) pieceSelectEl.value = prev;
+    }
+
+    function updatePieceCounts() {
+      const rem = remainingPieces[currentPlayer];
+      const lines = [];
+      for (const type of PIECE_ORDER) {
+        const cfg = PIECE_CONFIG[type];
+        lines.push(`${cfg.label}${cfg.rank} ${type}: ${rem[type]}`);
+      }
+      pieceCountsEl.textContent = lines.join(" | ");
+    }
+
+    function allPiecesPlaced(playerId) {
+      const rem = remainingPieces[playerId];
+      return Object.keys(rem).every(t => rem[t] === 0);
+    }
+
+    function coordLabel(row, col) {
+      return colLabels[col] + (row + 1);
+    }
+
+    function clearSelectionHighlight() {
+      document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
+    }
+
+    function onBoardClick(e) {
+      const cell = e.target.closest('.cell');
+      if (!cell) return;
+      const row = Number(cell.dataset.row);
+      const col = Number(cell.dataset.col);
+      if (phase === "setup") handleSetupClick(row, col, cell);
+      else if (phase === "play") handlePlayClick(row, col, cell);
+    }
+
+    function updateLastMoveHighlights() {
+      document.querySelectorAll('.cell.last-move-from, .cell.last-move-to')
+        .forEach(c => c.classList.remove('last-move-from', 'last-move-to'));
+
+      if (lastMoveFrom) {
+        const fromCell = document.getElementById(`cell-${lastMoveFrom.row}-${lastMoveFrom.col}`);
+        if (fromCell) fromCell.classList.add('last-move-from');
+      }
+      if (lastMoveTo) {
+        const toCell = document.getElementById(`cell-${lastMoveTo.row}-${lastMoveTo.col}`);
+        if (toCell) toCell.classList.add('last-move-to');
+      }
+    }
+
+    function handleSetupClick(row, col, cell) {
+      const halfLine = 4;
+
+      if (gameDocRef && currentPlayer !== myPlayerId) {
+        infoEl.textContent = "It's not your setup turn.";
+        return;
+      }
+
+      if (currentPlayer === "P1" && row > halfLine) {
+        infoEl.textContent = "Player 1 can only place pieces on rows 1–5.";
+        return;
+      }
+      if (currentPlayer === "P2" && row <= halfLine) {
+        infoEl.textContent = "Player 2 can only place pieces on rows 6–10.";
+        return;
+      }
+
+      const existing = boardPieces[row][col];
+      if (existing && existing.owner === currentPlayer) {
+        remainingPieces[currentPlayer][existing.type]++;
+        boardPieces[row][col] = null;
+        renderBoardPieces();
+        updatePieceSelect();
+        updatePieceCounts();
+        infoEl.textContent = `Removed ${existing.type} from ${coordLabel(row,col)}.`;
+        syncGameStateToFirestore();
+        return;
+      }
+
+      if (existing && existing.owner !== currentPlayer) {
+        infoEl.textContent = "You cannot overwrite opponent's piece.";
+        return;
+      }
+
+      const type = pieceSelectEl.value;
+      if (!type) { infoEl.textContent = "Select a piece type first."; return; }
+
+      if (remainingPieces[currentPlayer][type] <= 0) {
+        infoEl.textContent = "No pieces of that type left.";
+        return;
+      }
+
+      const tempPiece = createPiece(type, currentPlayer);
+      if (!isPassableTerrainForPiece(tempPiece, row, col)) {
+        infoEl.textContent = "That terrain is not suitable for this piece.";
+        return;
+      }
+
+      boardPieces[row][col] = tempPiece;
+      remainingPieces[currentPlayer][type]--;
+      renderBoardPieces();
+      updatePieceSelect();
+      updatePieceCounts();
+      infoEl.textContent = `Placed ${type} at ${coordLabel(row,col)}.`;
+      syncGameStateToFirestore();
+    }
+
+    function ownerLabel(ownerId) {
+      return playerNames[ownerId] || (ownerId === "P1" ? "Player 1" : "Player 2");
+    }
+
+    function handlePlayClick(row, col, cell) {
+      if (gameDocRef && currentPlayer !== myPlayerId) {
+        infoEl.textContent = "It's not your turn.";
+        return;
+      }
+
+      const clickedPiece = boardPieces[row][col];
+
+      if (!selectedCell) {
+        if (!clickedPiece) { infoEl.textContent = "Select one of your pieces to move."; return; }
+        if (clickedPiece.owner !== myPlayerId) { infoEl.textContent = "You can only move your own pieces."; return; }
+        selectedCell = { row, col };
+        clearSelectionHighlight();
+        cell.classList.add('selected');
+        infoEl.textContent = `Selected ${clickedPiece.type} at ${coordLabel(row,col)}.`;
+        return;
+      }
+
+      if (selectedCell.row === row && selectedCell.col === col) {
+        selectedCell = null;
+        clearSelectionHighlight();
+        infoEl.textContent = "Selection cleared.";
+        return;
+      }
+
+      const { row: fr, col: fc } = selectedCell;
+
+      const attackerPiece = boardPieces[fr][fc];
+      const defenderPiece = boardPieces[row][col];
+
+      const result = makeMove(boardPieces, currentPlayer, fr, fc, row, col);
+      if (!result.ok) { infoEl.textContent = "Illegal move: " + result.reason; return; }
+
+      boardPieces = result.board;
+      selectedCell = null;
+      clearSelectionHighlight();
+      renderBoardPieces();
+
+      lastMoveFrom = { row: fr, col: fc };
+      lastMoveTo   = { row, col };
+      updateLastMoveHighlights();
+
+      function pieceLabel(p) {
+        if (!p) return "";
+        const cfg = PIECE_CONFIG[p.type];
+        return cfg.label + cfg.rank;
+      }
+
+      const fromCoord = coordLabel(fr, fc);
+      const toCoord   = coordLabel(row, col);
+      let baseMessage = "";
+
+      if (!attackerPiece) {
+        baseMessage = `A piece moved from ${fromCoord} to ${toCoord}.`;
+      } else if (!defenderPiece) {
+        baseMessage = `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord}.`;
+      } else {
+        if (defenderPiece.type === PieceType.BOMB) {
+          if (attackerPiece.type === PieceType.MAJOR) {
+            baseMessage =
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and defused ` +
+              `${ownerLabel(defenderPiece.owner)}'s Bomb (${pieceLabel(defenderPiece)}).`;
+          } else {
+            baseMessage =
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord}, but ` +
+              `${ownerLabel(defenderPiece.owner)}'s Bomb (${pieceLabel(defenderPiece)}) exploded; both pieces were removed.`;
+          }
+        } else if (defenderPiece.type === PieceType.FLAG) {
+          baseMessage =
+            `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and captured ` +
+            `${ownerLabel(defenderPiece.owner)}'s Flag (${pieceLabel(defenderPiece)}).`;
+        } else if (attackerPiece.type === PieceType.SPY && defenderPiece.type === PieceType.SPY) {
+          baseMessage =
+            `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and converted ` +
+            `${ownerLabel(defenderPiece.owner)}'s Spy (${pieceLabel(defenderPiece)}) into a double agent.`;
+        } else {
+          if (attackerPiece.rank >= defenderPiece.rank) {
+            baseMessage =
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and captured ` +
+              `${ownerLabel(defenderPiece.owner)}'s ${pieceLabel(defenderPiece)}.`;
+          } else {
+            baseMessage =
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} but was defeated by ` +
+              `${ownerLabel(defenderPiece.owner)}'s ${pieceLabel(defenderPiece)}.`;
+          }
+        }
+      }
+
+      if (result.winnerPlayerId) {
+        phase = "gameOver";
+        for (let r = 0; r < BOARD_ROWS; r++) {
+          for (let c = 0; c < BOARD_COLS; c++) {
+            const p = boardPieces[r][c];
+            if (p) p.revealed = true;
+          }
+        }
+        renderBoardPieces();
+
+        const winnerLabel = playerNames[result.winnerPlayerId] || (result.winnerPlayerId === "P1" ? "Player 1" : "Player 2");
+        gameStatusEl.textContent = `Game over! ${winnerLabel} wins by capturing the flag!`;
+
+        const statusMessage = baseMessage;
+        infoEl.textContent = statusMessage;
+        setupControlsEl.style.display = "none";
+
+        syncGameStateToFirestore({ winner: result.winnerPlayerId, statusMessage });
+        return;
+      }
+
+      currentPlayer = currentPlayer === "P1" ? "P2" : "P1";
+      const nextName = playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
+      const statusMessage = `${baseMessage} Now it's ${nextName}'s turn.`;
+
+      infoEl.textContent = statusMessage;
+      updateStatus();
+      renderBoardPieces();
+      syncGameStateToFirestore({ statusMessage });
+    }
+
+    function onFinishSetupClick() {
+      if (!allPiecesPlaced(currentPlayer)) {
+        infoEl.textContent = "You must place all your pieces before finishing setup.";
+        return;
+      }
+
+      if (currentPlayer === "P1") {
+        currentPlayer = "P2";
+        updateStatus();
+        updatePieceSelect();
+        updatePieceCounts();
+        renderBoardPieces();
+
+        const p2Name = playerNames.P2 || "Player 2";
+        const statusMessage = `${p2Name}: place your pieces on rows 6–10.`;
+        infoEl.textContent = statusMessage;
+        syncGameStateToFirestore({ statusMessage });
+      } else if (currentPlayer === "P2") {
+        phase = "play";
+        currentPlayer = "P1";
+        setupControlsEl.style.display = "none";
+        updateStatus();
+        renderBoardPieces();
+
+        const p1Name = playerNames.P1 || "Player 1";
+        const statusMessage = `Setup complete. ${p1Name} moves first. Tap a piece to move.`;
+        infoEl.textContent = statusMessage;
+        syncGameStateToFirestore({ statusMessage });
+      }
+    }
+
+    finishSetupBtn.addEventListener('click', onFinishSetupClick);
+    boardEl.addEventListener('click', onBoardClick);
+
+    function init() {
+      phase = "setup";
+      currentPlayer = "P1";
+      selectedCell = null;
+      lastMoveFrom = null;
+      lastMoveTo = null;
+      capturedBy = { P1: makeEmptyCapturedMap(), P2: makeEmptyCapturedMap() };
+      updateLastMoveHighlights();
+      updateStatus();
+      updatePieceSelect();
+      updatePieceCounts();
+      renderBoardPieces();
+      infoEl.textContent = "Player 1: place your pieces on rows 1–5. Click again on a piece to remove it.";
+    }
+    init();
+  </script>
+</body>
+</html>
