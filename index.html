@@ -792,6 +792,81 @@
       return { ok: true };
     }
 
+function hasAnyLegalMove(playerId) {
+  for (let r = 0; r < BOARD_ROWS; r++) {
+    for (let c = 0; c < BOARD_COLS; c++) {
+      const p = boardPieces[r][c];
+      if (!p || p.owner !== playerId) continue;
+      if (!PIECE_CONFIG[p.type].canMove) continue;
+
+      // Generate candidate destinations
+      if (p.type === PieceType.AIRMAN) {
+        // Rook-like lines (up, down, left, right)
+        const dirs = [
+          { dr: -1, dc: 0 },
+          { dr:  1, dc: 0 },
+          { dr:  0, dc: -1 },
+          { dr:  0, dc:  1 }
+        ];
+        for (const d of dirs) {
+          let rr = r + d.dr;
+          let cc = c + d.dc;
+          while (inBounds(rr, cc)) {
+            // If there's a piece in the way, Airman cannot jump over pieces:
+            // but capturing that piece is allowed if the move is legal.
+            const check = canPieceMove(boardPieces, p, r, c, rr, cc);
+            if (check.ok) return true;
+
+            // Stop searching further in this direction if a piece blocks the path.
+            if (boardPieces[rr][cc] !== null) break;
+
+            rr += d.dr;
+            cc += d.dc;
+          }
+        }
+      } else {
+        // Normal pieces: 1 square orthogonal
+        const candidates = [
+          { rr: r - 1, cc: c },
+          { rr: r + 1, cc: c },
+          { rr: r, cc: c - 1 },
+          { rr: r, cc: c + 1 }
+        ];
+        for (const { rr, cc } of candidates) {
+          if (!inBounds(rr, cc)) continue;
+          const check = canPieceMove(boardPieces, p, r, c, rr, cc);
+          if (check.ok) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Advances turn with "skip if no moves" + stalemate detection.
+// Returns an object describing what happened.
+function advanceTurnAfterMove() {
+  const other = currentPlayer === "P1" ? "P2" : "P1";
+
+  const otherHasMoves = hasAnyLegalMove(other);
+  const currentHasMoves = hasAnyLegalMove(currentPlayer);
+
+  // If BOTH cannot move -> stalemate / tie
+  if (!otherHasMoves && !currentHasMoves) {
+    return { type: "stalemate" };
+  }
+
+  // If opponent cannot move -> current player goes again
+  if (!otherHasMoves) {
+    return { type: "skip", skipped: other };
+  }
+
+  // Normal turn switch
+  currentPlayer = other;
+  return { type: "normal" };
+}
+
+
     function resolveCombat(board, attacker, fromRow, fromCol, toRow, toCol) {
       const defender = board[toRow][toCol];
 
@@ -941,12 +1016,22 @@
       lastMoveFrom = data.lastMoveFrom || null;
       lastMoveTo   = data.lastMoveTo || null;
 
-      if (data.winner) {
-        phase = "gameOver";
-        const winnerLabel = playerNames[data.winner] || (data.winner === "P1" ? "Player 1" : "Player 2");
-        gameStatusEl.textContent = `Game over! ${winnerLabel} wins by capturing the flag!`;
-        setupControlsEl.style.display = "none";
-      }
+     if (data.winner) {
+  phase = "gameOver";
+
+  if (data.winner === "TIE") {
+    gameStatusEl.textContent = "Game over! Stalemate (tie) — no legal moves remain.";
+  } else {
+    const winnerLabel =
+      playerNames[data.winner] ||
+      (data.winner === "P1" ? "Player 1" : "Player 2");
+    gameStatusEl.textContent =
+      `Game over! ${winnerLabel} wins by capturing the flag!`;
+  }
+
+  setupControlsEl.style.display = "none";
+}
+
 
       if (typeof data.statusMessage === "string") infoEl.textContent = data.statusMessage;
 
@@ -1380,15 +1465,59 @@
         return;
       }
 
-      currentPlayer = currentPlayer === "P1" ? "P2" : "P1";
-      const nextName = playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
-      const statusMessage = `${baseMessage} Now it's ${nextName}'s turn.`;
+   // Normal move, no winner: advance turn with skip/stalemate logic
+const turnResult = advanceTurnAfterMove();
 
-      infoEl.textContent = statusMessage;
-      updateStatus();
-      renderBoardPieces();
-      syncGameStateToFirestore({ statusMessage });
+if (turnResult.type === "stalemate") {
+  phase = "gameOver";
+
+  // Reveal all pieces at stalemate (optional, but usually nice)
+  for (let r = 0; r < BOARD_ROWS; r++) {
+    for (let c = 0; c < BOARD_COLS; c++) {
+      const p = boardPieces[r][c];
+      if (p) p.revealed = true;
     }
+  }
+  renderBoardPieces();
+
+  gameStatusEl.textContent = "Game over! Stalemate (tie) — no legal moves remain.";
+  const statusMessage = `${baseMessage} Stalemate: neither player has a legal move.`;
+  infoEl.textContent = statusMessage;
+  setupControlsEl.style.display = "none";
+
+  syncGameStateToFirestore({
+    winner: "TIE",
+    statusMessage
+  });
+  return;
+}
+
+let statusMessage = "";
+
+if (turnResult.type === "skip") {
+  const skippedName =
+    playerNames[turnResult.skipped] ||
+    (turnResult.skipped === "P1" ? "Player 1" : "Player 2");
+
+  const curName =
+    playerNames[currentPlayer] ||
+    (currentPlayer === "P1" ? "Player 1" : "Player 2");
+
+  statusMessage =
+    `${baseMessage} ${skippedName} has no legal moves, so ${curName} goes again.`;
+} else {
+  const nextName =
+    playerNames[currentPlayer] ||
+    (currentPlayer === "P1" ? "Player 1" : "Player 2");
+  statusMessage = `${baseMessage} Now it's ${nextName}'s turn.`;
+}
+
+infoEl.textContent = statusMessage;
+updateStatus();
+renderBoardPieces();
+
+syncGameStateToFirestore({ statusMessage });
+
 
     function onFinishSetupClick() {
       if (!allPiecesPlaced(currentPlayer)) {
