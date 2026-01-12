@@ -46,7 +46,7 @@
       min-height: 1.1em;
     }
 
-    /* NEW: Graveyards */
+    /* Graveyards */
     .graveyard-box {
       margin-top: 6px;
       padding: 6px 8px;
@@ -383,7 +383,6 @@
     <h1>Capture-the-Flag Prototype</h1>
 
     <div class="top-panel">
-      <!-- Lobby for Firestore multiplayer -->
       <div id="lobby">
         <div class="controls-row">
           <label>
@@ -406,7 +405,6 @@
       <div id="gameStatus">Loading…</div>
       <div id="capturedSummary"></div>
 
-      <!-- NEW: Graveyards -->
       <div class="graveyard-box">
         <div class="graveyard-title">Graveyard (pieces removed)</div>
         <div class="graveyard-row">
@@ -495,10 +493,6 @@
   </script>
 
   <script>
-    /*****************************************************************
-     *  TERRAIN: 10x10 board with meandering river, bridges, trees
-     *****************************************************************/
-
     const terrainMap = [
       ['E','E','E','E','E','E','E','E','E','E'],
       ['E','E','E','E','E','E','E','E','E','E'],
@@ -556,9 +550,7 @@
     firebase.auth().onAuthStateChanged(user => {
       if (user) {
         authReady = true;
-        if (!lobbyStatusEl.textContent) {
-          lobbyStatusEl.textContent = "Connected. You can create or join a game.";
-        }
+        if (!lobbyStatusEl.textContent) lobbyStatusEl.textContent = "Connected. You can create or join a game.";
       } else {
         authReady = false;
         lobbyStatusEl.textContent = "Connecting to Firebase…";
@@ -689,10 +681,6 @@
 
     buildBoardCells();
 
-    /*****************************************************************
-     *  PIECES & RULE ENGINE
-     *****************************************************************/
-
     const PieceType = {
       FLAG:      "flag",
       BOMB:      "bomb",
@@ -761,17 +749,14 @@
 
     function recordPieceCaptured(captorId, piece) {
       if (!piece || !captorId) return;
-      if (!capturedBy[captorId]) return;
       const t = piece.type;
-      if (capturedBy[captorId][t] != null) capturedBy[captorId][t]++;
+      if (capturedBy[captorId] && capturedBy[captorId][t] != null) capturedBy[captorId][t]++;
     }
 
     let phase = "setup";
     let currentPlayer = "P1";
-
     let lastMoveFrom = null;
     let lastMoveTo = null;
-
     let selectedCell = null;
 
     function inBounds(row, col) {
@@ -785,12 +770,9 @@
     function isPassableTerrainForPiece(piece, row, col) {
       const t = getTerrain(row, col);
       if (t === 'T') return false;
-      if (piece.type === PieceType.MARINE) {
-        return true;
-      } else {
-        if (t === 'R') return false;
-        return true;
-      }
+      if (piece.type === PieceType.MARINE) return true;
+      if (t === 'R') return false;
+      return true;
     }
 
     function manhattanDistance(r1, c1, r2, c2) {
@@ -840,23 +822,15 @@
       const dc = toCol - fromCol;
       if (dr !== 0 && dc !== 0) return { ok: false, reason: "no diagonals" };
 
-      if (!isPassableTerrainForPiece(piece, toRow, toCol)) {
-        return { ok: false, reason: "blocked by terrain" };
-      }
+      if (!isPassableTerrainForPiece(piece, toRow, toCol)) return { ok: false, reason: "blocked by terrain" };
 
       const targetPiece = board[toRow][toCol];
-      if (targetPiece && targetPiece.owner === piece.owner) {
-        return { ok: false, reason: "cannot capture own piece" };
-      }
+      if (targetPiece && targetPiece.owner === piece.owner) return { ok: false, reason: "cannot capture own piece" };
 
       if (piece.type === PieceType.AIRMAN) {
-        if (!isPathClear(board, fromRow, fromCol, toRow, toCol)) {
-          return { ok: false, reason: "path blocked by piece" };
-        }
+        if (!isPathClear(board, fromRow, fromCol, toRow, toCol)) return { ok: false, reason: "path blocked by piece" };
       } else {
-        if (manhattanDistance(fromRow, fromCol, toRow, toCol) !== 1) {
-          return { ok: false, reason: "must move 1 square" };
-        }
+        if (manhattanDistance(fromRow, fromCol, toRow, toCol) !== 1) return { ok: false, reason: "must move 1 square" };
       }
       return { ok: true };
     }
@@ -870,18 +844,11 @@
           if (!PIECE_CONFIG[piece.type].canMove) continue;
 
           if (piece.type === PieceType.AIRMAN) {
-            const dirs = [
-              { dr: -1, dc: 0 },
-              { dr:  1, dc: 0 },
-              { dr:  0, dc:-1 },
-              { dr:  0, dc: 1 }
-            ];
+            const dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
             for (const {dr, dc} of dirs) {
-              let rr = r + dr;
-              let cc = c + dc;
+              let rr = r + dr, cc = c + dc;
               while (inBounds(rr, cc)) {
                 const target = boardPieces[rr][cc];
-
                 if (target) {
                   if (target.owner !== playerId) {
                     const check = canPieceMove(boardPieces, piece, r, c, rr, cc);
@@ -889,21 +856,13 @@
                   }
                   break;
                 }
-
                 const check = canPieceMove(boardPieces, piece, r, c, rr, cc);
                 if (check.ok) return true;
-
-                rr += dr;
-                cc += dc;
+                rr += dr; cc += dc;
               }
             }
           } else {
-            const candidates = [
-              { rr: r - 1, cc: c },
-              { rr: r + 1, cc: c },
-              { rr: r, cc: c - 1 },
-              { rr: r, cc: c + 1 }
-            ];
+            const candidates = [{rr:r-1,cc:c},{rr:r+1,cc:c},{rr:r,cc:c-1},{rr:r,cc:c+1}];
             for (const {rr, cc} of candidates) {
               if (!inBounds(rr, cc)) continue;
               const check = canPieceMove(boardPieces, piece, r, c, rr, cc);
@@ -978,9 +937,7 @@
     }
 
     function makeMove(board, currentPlayerId, fromRow, fromCol, toRow, toCol) {
-      if (!inBounds(fromRow, fromCol) || !inBounds(toRow, toCol)) {
-        return { ok: false, reason: "out of bounds" };
-      }
+      if (!inBounds(fromRow, fromCol) || !inBounds(toRow, toCol)) return { ok: false, reason: "out of bounds" };
       const piece = board[fromRow][fromCol];
       if (!piece) return { ok: false, reason: "no piece at source" };
       if (piece.owner !== currentPlayerId) return { ok: false, reason: "not your piece" };
@@ -989,7 +946,6 @@
       if (!check.ok) return { ok: false, reason: check.reason };
 
       clearTemporaryReveals(board);
-
       const result = resolveCombat(board, piece, fromRow, fromCol, toRow, toCol);
       return { ok: true, board: result.board, winnerPlayerId: result.winnerPlayerId };
     }
@@ -1032,10 +988,7 @@
         lastMoveTo: lastMoveTo || null,
         capturedByP1: capturedBy.P1,
         capturedByP2: capturedBy.P2,
-        players: {
-          P1: { name: playerNames.P1 },
-          P2: { name: playerNames.P2 }
-        },
+        players: { P1: { name: playerNames.P1 }, P2: { name: playerNames.P2 } },
         ...extraFields
       };
       gameDocRef.update(payload).catch(err => {
@@ -1071,8 +1024,7 @@
         if (data.winner === "TIE") {
           gameStatusEl.textContent = "Game over! Stalemate (tie).";
         } else {
-          const winnerLabel =
-            playerNames[data.winner] || (data.winner === "P1" ? "Player 1" : "Player 2");
+          const winnerLabel = playerNames[data.winner] || (data.winner === "P1" ? "Player 1" : "Player 2");
           gameStatusEl.textContent = `Game over! ${winnerLabel} wins by capturing the flag!`;
         }
         setupControlsEl.style.display = "none";
@@ -1104,10 +1056,7 @@
         board: serializeBoard(boardPieces),
         remainingPiecesP1: remainingPieces.P1,
         remainingPiecesP2: remainingPieces.P2,
-        players: {
-          P1: { name: myPlayerName },
-          P2: null
-        },
+        players: { P1: { name: myPlayerName }, P2: null },
         winner: null,
         lastMoveFrom: null,
         lastMoveTo: null,
@@ -1159,9 +1108,7 @@
           return;
         }
 
-        if (data.players && data.players.P1 && data.players.P1.name) playerNames.P1 = data.players.P1.name;
-        else playerNames.P1 = "Player 1";
-
+        playerNames.P1 = (data.players?.P1?.name) || "Player 1";
         playerNames.P2 = myPlayerName;
 
         await docRef.update({ "players.P2": { name: myPlayerName } });
@@ -1189,8 +1136,7 @@
 
     createGameBtn.addEventListener('click', () => {
       if (!authReady) {
-        lobbyStatusEl.textContent =
-          "Auth not ready yet. Please wait a couple seconds and tap Create Game again.";
+        lobbyStatusEl.textContent = "Auth not ready yet. Please wait a couple seconds and tap Create Game again.";
         return;
       }
       lobbyStatusEl.textContent = "Creating game...";
@@ -1199,8 +1145,7 @@
 
     joinGameBtn.addEventListener('click', () => {
       if (!authReady) {
-        lobbyStatusEl.textContent =
-          "Auth not ready yet. Please wait a couple seconds and tap Join Game again.";
+        lobbyStatusEl.textContent = "Auth not ready yet. Please wait a couple seconds and tap Join Game again.";
         return;
       }
       lobbyStatusEl.textContent = "Joining game...";
@@ -1246,18 +1191,14 @@
         const count = myCaptures[type];
         if (count > 0) {
           const cfg = PIECE_CONFIG[type];
-          const label = cfg.label + cfg.rank;
-          parts.push(`${label}×${count}`);
+          parts.push(`${cfg.label}${cfg.rank}×${count}`);
         }
       }
 
       capturedSummaryEl.textContent =
-        parts.length === 0
-          ? "Pieces you have captured: none yet."
-          : "Pieces you have captured: " + parts.join(", ");
+        parts.length === 0 ? "Pieces you have captured: none yet." : "Pieces you have captured: " + parts.join(", ");
     }
 
-    // NEW: Graveyard rendering (lost pieces)
     function formatCounts(countMap) {
       const parts = [];
       for (const type of PIECE_ORDER) {
@@ -1277,43 +1218,57 @@
       graveyardP1LabelEl.textContent = `Removed from ${p1Name}:`;
       graveyardP2LabelEl.textContent = `Removed from ${p2Name}:`;
 
-      // Pieces removed from P1 are those captured by P2
-      graveyardP1TextEl.textContent = formatCounts(capturedBy.P2);
-
-      // Pieces removed from P2 are those captured by P1
-      graveyardP2TextEl.textContent = formatCounts(capturedBy.P1);
+      graveyardP1TextEl.textContent = formatCounts(capturedBy.P2); // removed from P1
+      graveyardP2TextEl.textContent = formatCounts(capturedBy.P1); // removed from P2
     }
 
     function updateStatus() {
-      const currentName =
-        playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
+      const currentName = playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
 
-      if (phase === "setup") {
-        gameStatusEl.textContent = `Setup: ${currentName} — place your pieces on your side.`;
-      } else if (phase === "play") {
-        gameStatusEl.textContent = `Play: ${currentName}'s turn.`;
-      }
+      if (phase === "setup") gameStatusEl.textContent = `Setup: ${currentName} — place your pieces on your side.`;
+      else if (phase === "play") gameStatusEl.textContent = `Play: ${currentName}'s turn.`;
 
       currentPlayerLabelEl.textContent = currentName;
       updateCapturedSummary();
       updateGraveyards();
     }
 
+    // ✅ #3: only show remaining > 0 in the dropdown, and restore if > 0 again
     function updatePieceSelect() {
       const rem = remainingPieces[currentPlayer];
       const prev = pieceSelectEl.value;
 
       pieceSelectEl.innerHTML = "";
+
+      // Build only options that still have pieces left
       for (const type of PIECE_ORDER) {
+        const left = rem[type];
+        if (left <= 0) continue; // hide exhausted types
+
         const cfg = PIECE_CONFIG[type];
         const option = document.createElement('option');
         option.value = type;
-        const left = rem[type];
         option.textContent = `${cfg.label}${cfg.rank} — ${type} (${left} left)`;
         pieceSelectEl.appendChild(option);
       }
 
-      if (prev && rem[prev] != null && rem[prev] > 0) pieceSelectEl.value = prev;
+      // If nothing left, disable dropdown and show message
+      if (pieceSelectEl.options.length === 0) {
+        pieceSelectEl.disabled = true;
+        infoEl.textContent = "No pieces left to place (for this player). Click Finish setup.";
+        return;
+      } else {
+        pieceSelectEl.disabled = false;
+      }
+
+      // Try to keep old selection if it still exists in new list
+      const stillThere = Array.from(pieceSelectEl.options).some(o => o.value === prev);
+      if (prev && stillThere) {
+        pieceSelectEl.value = prev;
+      } else {
+        // otherwise select first available
+        pieceSelectEl.selectedIndex = 0;
+      }
     }
 
     function updatePieceCounts() {
@@ -1339,16 +1294,6 @@
       document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
     }
 
-    function onBoardClick(e) {
-      const cell = e.target.closest('.cell');
-      if (!cell) return;
-      const row = Number(cell.dataset.row);
-      const col = Number(cell.dataset.col);
-
-      if (phase === "setup") handleSetupClick(row, col, cell);
-      else if (phase === "play") handlePlayClick(row, col, cell);
-    }
-
     function updateLastMoveHighlights() {
       document.querySelectorAll('.cell.last-move-from, .cell.last-move-to')
         .forEach(c => c.classList.remove('last-move-from', 'last-move-to'));
@@ -1363,7 +1308,18 @@
       }
     }
 
-    function handleSetupClick(row, col, cell) {
+    function onBoardClick(e) {
+      const cell = e.target.closest('.cell');
+      if (!cell) return;
+
+      const row = Number(cell.dataset.row);
+      const col = Number(cell.dataset.col);
+
+      if (phase === "setup") handleSetupClick(row, col);
+      else if (phase === "play") handlePlayClick(row, col, cell);
+    }
+
+    function handleSetupClick(row, col) {
       const halfLine = 4;
 
       if (gameDocRef && currentPlayer !== myPlayerId) {
@@ -1384,9 +1340,11 @@
       if (existing && existing.owner === currentPlayer) {
         remainingPieces[currentPlayer][existing.type]++;
         boardPieces[row][col] = null;
+
         renderBoardPieces();
-        updatePieceSelect();
+        updatePieceSelect();     // ✅ re-add type if it now has > 0
         updatePieceCounts();
+
         infoEl.textContent = `Removed ${existing.type} from ${coordLabel(row,col)}.`;
         syncGameStateToFirestore();
         return;
@@ -1404,6 +1362,8 @@
       }
 
       if (remainingPieces[currentPlayer][type] <= 0) {
+        // Should rarely happen now because it should disappear, but keep safety
+        updatePieceSelect();
         infoEl.textContent = "No pieces of that type left.";
         return;
       }
@@ -1416,9 +1376,11 @@
 
       boardPieces[row][col] = tempPiece;
       remainingPieces[currentPlayer][type]--;
+
       renderBoardPieces();
-      updatePieceSelect();
+      updatePieceSelect();   // ✅ if it hits 0, it disappears immediately
       updatePieceCounts();
+
       infoEl.textContent = `Placed ${type} at ${coordLabel(row,col)}.`;
       syncGameStateToFirestore();
     }
@@ -1493,44 +1455,29 @@
         baseMessage = `A piece moved from ${fromCoord} to ${toCoord}.`;
       } else if (!defenderPiece) {
         baseMessage =
-          `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-          `moved from ${fromCoord} to ${toCoord}.`;
+          `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord}.`;
       } else {
         if (defenderPiece.type === PieceType.BOMB) {
           if (attackerPiece.type === PieceType.MAJOR) {
             baseMessage =
-              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-              `moved from ${fromCoord} to ${toCoord} and defused ` +
-              `${ownerLabel(defenderPiece.owner)}'s Bomb (${pieceLabel(defenderPiece)}).`;
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and defused ${ownerLabel(defenderPiece.owner)}'s Bomb (${pieceLabel(defenderPiece)}).`;
           } else {
             baseMessage =
-              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-              `moved from ${fromCoord} to ${toCoord}, but ` +
-              `${ownerLabel(defenderPiece.owner)}'s Bomb (${pieceLabel(defenderPiece)}) ` +
-              `exploded; both pieces were removed.`;
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord}, but ${ownerLabel(defenderPiece.owner)}'s Bomb (${pieceLabel(defenderPiece)}) exploded; both pieces were removed.`;
           }
         } else if (defenderPiece.type === PieceType.FLAG) {
           baseMessage =
-            `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-            `moved from ${fromCoord} to ${toCoord} and captured ` +
-            `${ownerLabel(defenderPiece.owner)}'s Flag (${pieceLabel(defenderPiece)}).`;
+            `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and captured ${ownerLabel(defenderPiece.owner)}'s Flag (${pieceLabel(defenderPiece)}).`;
         } else if (attackerPiece.type === PieceType.SPY && defenderPiece.type === PieceType.SPY) {
           baseMessage =
-            `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-            `moved from ${fromCoord} to ${toCoord} and converted ` +
-            `${ownerLabel(defenderPiece.owner)}'s Spy (${pieceLabel(defenderPiece)}) ` +
-            `into a double agent.`;
+            `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and converted ${ownerLabel(defenderPiece.owner)}'s Spy (${pieceLabel(defenderPiece)}) into a double agent.`;
         } else {
           if (attackerPiece.rank >= defenderPiece.rank) {
             baseMessage =
-              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-              `moved from ${fromCoord} to ${toCoord} and captured ` +
-              `${ownerLabel(defenderPiece.owner)}'s ${pieceLabel(defenderPiece)}.`;
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} and captured ${ownerLabel(defenderPiece.owner)}'s ${pieceLabel(defenderPiece)}.`;
           } else {
             baseMessage =
-              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} ` +
-              `moved from ${fromCoord} to ${toCoord} but was defeated by ` +
-              `${ownerLabel(defenderPiece.owner)}'s ${pieceLabel(defenderPiece)}.`;
+              `${ownerLabel(attackerPiece.owner)}'s ${pieceLabel(attackerPiece)} moved from ${fromCoord} to ${toCoord} but was defeated by ${ownerLabel(defenderPiece.owner)}'s ${pieceLabel(defenderPiece)}.`;
           }
         }
       }
@@ -1546,9 +1493,7 @@
         }
         renderBoardPieces();
 
-        const winnerLabel =
-          playerNames[result.winnerPlayerId] ||
-          (result.winnerPlayerId === "P1" ? "Player 1" : "Player 2");
+        const winnerLabel = playerNames[result.winnerPlayerId] || (result.winnerPlayerId === "P1" ? "Player 1" : "Player 2");
         gameStatusEl.textContent = `Game over! ${winnerLabel} wins by capturing the flag!`;
 
         const statusMessage = baseMessage;
@@ -1575,8 +1520,7 @@
           }
           renderBoardPieces();
 
-          const statusMessage =
-            `${baseMessage} Stalemate! Neither player has a legal move. It's a tie.`;
+          const statusMessage = `${baseMessage} Stalemate! Neither player has a legal move. It's a tie.`;
           gameStatusEl.textContent = "Game over! Stalemate (tie).";
           infoEl.textContent = statusMessage;
           setupControlsEl.style.display = "none";
@@ -1585,13 +1529,10 @@
           return;
         }
 
-        const currentName =
-          playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
-        const stuckName =
-          playerNames[proposedNext] || (proposedNext === "P1" ? "Player 1" : "Player 2");
+        const currentName = playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
+        const stuckName   = playerNames[proposedNext] || (proposedNext === "P1" ? "Player 1" : "Player 2");
 
-        const statusMessage =
-          `${baseMessage} ${stuckName} has no legal moves, so ${currentName} continues.`;
+        const statusMessage = `${baseMessage} ${stuckName} has no legal moves, so ${currentName} continues.`;
 
         infoEl.textContent = statusMessage;
         updateStatus();
@@ -1601,9 +1542,7 @@
       }
 
       currentPlayer = proposedNext;
-
-      const nextName =
-        playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
+      const nextName = playerNames[currentPlayer] || (currentPlayer === "P1" ? "Player 1" : "Player 2");
       const statusMessage = `${baseMessage} Now it's ${nextName}'s turn.`;
 
       infoEl.textContent = statusMessage;
@@ -1655,11 +1594,13 @@
       lastMoveFrom = null;
       lastMoveTo = null;
       capturedBy = { P1: makeEmptyCapturedMap(), P2: makeEmptyCapturedMap() };
+
       updateLastMoveHighlights();
       updateStatus();
       updatePieceSelect();
       updatePieceCounts();
       renderBoardPieces();
+
       infoEl.textContent = "Player 1: place your pieces on rows 1–5. Click again on a piece to remove it.";
     }
 
