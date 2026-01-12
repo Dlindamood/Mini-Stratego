@@ -10,8 +10,7 @@
     .container { max-width:520px; margin:0 auto; }
 
     .top-panel { background:#222; padding:8px 10px; border-radius:8px; margin-bottom:8px; font-size:.9rem; }
-    #gameStatus { font-weight:bold; margin-bottom:4px; }
-    #capturedSummary { font-size:.8rem; margin-bottom:4px; color:#ffecb3; min-height:1.1em; }
+    #gameStatus { font-weight:bold; margin-bottom:6px; }
     #currentPlayerLabel { font-weight:bold; }
 
     .controls-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:4px; }
@@ -131,14 +130,81 @@
     #lobbyStatus { font-size:.8rem; min-height:1.2em; }
     #inGameInfo { font-size:.8rem; margin-top:2px; }
 
-    /* Graveyards */
+    /* Graveyard chips */
     .graveyard-box { margin-top:6px; padding:6px 8px; border-radius:8px; background:#1b1b1b; border:1px solid #444; font-size:.8rem; }
     .graveyard-title { font-weight:bold; margin-bottom:4px; font-size:.82rem; color:#b3e5fc; }
-    .graveyard-row { display:flex; gap:8px; align-items:baseline; margin-bottom:3px; flex-wrap:wrap; }
-    .graveyard-label { font-weight:bold; color:#ddd; white-space:nowrap; }
-    .graveyard-text { color:#e0e0e0; min-height:1.1em; }
+    .graveyard-row { display:flex; gap:8px; align-items:flex-start; margin-bottom:6px; flex-wrap:wrap; }
+    .graveyard-label { font-weight:bold; color:#ddd; white-space:nowrap; min-width: 150px; }
+    .graveyard-chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height: 28px; }
+
+    .gy-chip {
+      position:relative;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight: bold;
+      font-size: 0.62rem;
+      color: #fff;
+      box-shadow: 0 0 4px rgba(0,0,0,.7);
+      user-select: none;
+    }
+    .gy-chip.P1 { background:#1565c0; }
+    .gy-chip.P2 { background:#b71c1c; }
+    .gy-chip.flag { background:#ffa000; }
+    .gy-chip.bomb { background:#424242; }
+
+    .gy-badge {
+      position:absolute;
+      top:-6px;
+      right:-6px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #111;
+      border: 2px solid #fff;
+      color: #fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 0.62rem;
+      line-height: 1;
+      box-shadow: 0 0 4px rgba(0,0,0,.7);
+    }
+
+    .gy-empty {
+      color:#aaa;
+      font-style: italic;
+      font-size: 0.8rem;
+    }
+
+    /* Fanfare confetti overlay */
+    .confetti-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      overflow: hidden;
+    }
+    .confetti {
+      position: absolute;
+      top: -12px;
+      width: 10px;
+      height: 14px;
+      opacity: 0.95;
+      border-radius: 2px;
+      animation: confettiFall 1.8s linear forwards;
+      transform: rotate(0deg);
+    }
+    @keyframes confettiFall {
+      0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(110vh) rotate(720deg); opacity: 0.9; }
+    }
   </style>
 </head>
+
 <body>
   <div class="container">
     <h1>Capture-the-Flag Prototype</h1>
@@ -163,21 +229,22 @@
       </div>
 
       <div id="gameStatus">Loading…</div>
-      <div id="capturedSummary"></div>
 
       <div class="graveyard-box">
         <div class="graveyard-title">Graveyard (pieces removed)</div>
+
         <div class="graveyard-row">
           <div class="graveyard-label" id="graveyardP1Label">Removed from Player 1:</div>
-          <div class="graveyard-text" id="graveyardP1Text"></div>
+          <div class="graveyard-chips" id="graveyardP1Chips"></div>
         </div>
-        <div class="graveyard-row">
+
+        <div class="graveyard-row" style="margin-bottom:0;">
           <div class="graveyard-label" id="graveyardP2Label">Removed from Player 2:</div>
-          <div class="graveyard-text" id="graveyardP2Text"></div>
+          <div class="graveyard-chips" id="graveyardP2Chips"></div>
         </div>
       </div>
 
-      <div class="controls-row" id="setupControls" style="margin-top: 6px;">
+      <div class="controls-row" id="setupControls" style="margin-top: 8px;">
         <span>Current player: <span id="currentPlayerLabel">P1</span></span>
         <label>
           Piece:
@@ -237,6 +304,9 @@
   </script>
 
   <script>
+    /*****************************************************************
+     *  TERRAIN: 10x10 board with meandering river, bridges, trees
+     *****************************************************************/
     const terrainMap = [
       ['E','E','E','E','E','E','E','E','E','E'],
       ['E','E','E','E','E','E','E','E','E','E'],
@@ -255,7 +325,6 @@
     const boardEl = document.getElementById('board');
     const infoEl  = document.getElementById('info');
     const gameStatusEl = document.getElementById('gameStatus');
-    const capturedSummaryEl = document.getElementById('capturedSummary');
     const pieceSelectEl = document.getElementById('pieceSelect');
     const finishSetupBtn = document.getElementById('finishSetupBtn');
     const pieceCountsEl = document.getElementById('pieceCounts');
@@ -264,8 +333,8 @@
 
     const graveyardP1LabelEl = document.getElementById('graveyardP1Label');
     const graveyardP2LabelEl = document.getElementById('graveyardP2Label');
-    const graveyardP1TextEl  = document.getElementById('graveyardP1Text');
-    const graveyardP2TextEl  = document.getElementById('graveyardP2Text');
+    const graveyardP1ChipsEl = document.getElementById('graveyardP1Chips');
+    const graveyardP2ChipsEl = document.getElementById('graveyardP2Chips');
 
     const lobbyStatusEl = document.getElementById('lobbyStatus');
     const playerNameInputEl = document.getElementById('playerNameInput');
@@ -278,12 +347,17 @@
 
     const colLabels = ['A','B','C','D','E','F','G','H','I','J'];
 
+    // Names shown to humans (defaults)
     let playerNames = { P1: "Player 1", P2: "Player 2" };
+
+    // Auth readiness
     let authReady = false;
 
+    // Who am I on THIS device (P1 or P2)?
     let myPlayerId = "P1";
     let myPlayerName = "";
 
+    // Firestore multiplayer
     let gameDocRef = null;
     let unsubscribeGame = null;
     let isSyncingFromFirestore = false;
@@ -308,6 +382,7 @@
       else boardEl.classList.remove("board-rotated");
     }
 
+    // River line endpoints: A3 -> J8
     const startCell = { row: 2, col: 0 };
     const endCell   = { row: 7, col: 9 };
     const startX = (startCell.col + 0.5) * MICRO;
@@ -324,7 +399,9 @@
     function getTerrain(r,c){ return terrainMap[r][c]; }
 
     function clearTemporaryReveals(board) {
-      for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) if(board[r][c]) board[r][c].revealed=false;
+      for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) {
+        if (board[r][c]) board[r][c].revealed = false;
+      }
     }
 
     function buildMicroGrid(type, macroRow, macroCol) {
@@ -412,6 +489,9 @@
     }
     buildBoardCells();
 
+    /*****************************************************************
+     *  PIECES & RULE ENGINE
+     *****************************************************************/
     const PieceType = {
       FLAG:"flag", BOMB:"bomb", MARINE:"marine", SPY:"spy", GENERAL:"general",
       COLONEL:"colonel", MAJOR:"major", LIEUTENANT:"lieutenant", AIRMAN:"airman"
@@ -447,8 +527,10 @@
       return true;
     }
 
+    // boardPieces[r][c] = piece or null
     let boardPieces = Array.from({length:BOARD_ROWS}, () => Array.from({length:BOARD_COLS}, () => null));
 
+    // Remaining pieces in setup
     let remainingPieces = { P1:{}, P2:{} };
     for (const type of Object.keys(PIECE_CONFIG)) {
       remainingPieces.P1[type] = PIECE_CONFIG[type].countPerPlayer;
@@ -458,6 +540,8 @@
     function makeEmptyCapturedMap(){
       const m={}; for(const t of Object.values(PieceType)) m[t]=0; return m;
     }
+
+    // capturedBy[captor] = counts of pieces that player has captured/eliminated
     let capturedBy = { P1: makeEmptyCapturedMap(), P2: makeEmptyCapturedMap() };
 
     function recordPieceCaptured(captorId, piece) {
@@ -466,8 +550,9 @@
       if (capturedBy[captorId] && capturedBy[captorId][t]!=null) capturedBy[captorId][t]++;
     }
 
-    let phase="setup";
-    let currentPlayer="P1";
+    // Game phase and turn
+    let phase="setup";           // "setup", "play", "gameOver"
+    let currentPlayer="P1";      // shared
     let lastMoveFrom=null, lastMoveTo=null;
     let selectedCell=null;
 
@@ -486,6 +571,9 @@
       return true;
     }
 
+    /*****************************************************************
+     *  EFFECT HELPERS + FLAG FANFARE
+     *****************************************************************/
     function triggerExplosionEffect(row, col) {
       const cell = document.getElementById(`cell-${row}-${col}`);
       if (!cell) return;
@@ -504,6 +592,88 @@
       setTimeout(()=>eff.remove(), 600);
     }
 
+    // Confetti burst
+    function triggerConfettiBurst() {
+      const overlay = document.createElement('div');
+      overlay.className = 'confetti-overlay';
+      document.body.appendChild(overlay);
+
+      // spawn a bunch of confetti pieces
+      const n = 120;
+      for (let i=0;i<n;i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        // random x, random delay, random size
+        const x = Math.random() * 100;
+        const delay = Math.random() * 0.15;
+        const w = 6 + Math.random() * 8;
+        const h = 10 + Math.random() * 12;
+
+        c.style.left = x + 'vw';
+        c.style.animationDelay = delay + 's';
+        c.style.width = w + 'px';
+        c.style.height = h + 'px';
+
+        // random bright color
+        const colors = ['#ffeb3b','#ff5722','#00e5ff','#76ff03','#e040fb','#ff4081','#ffffff','#ffa000'];
+        c.style.background = colors[(Math.random()*colors.length)|0];
+
+        overlay.appendChild(c);
+      }
+
+      setTimeout(() => overlay.remove(), 2200);
+    }
+
+    // Simple “victory” fanfare using WebAudio (no file)
+    function playFlagFanfare() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+
+        const ctx = new AudioCtx();
+
+        const now = ctx.currentTime;
+        const notes = [
+          { f: 523.25, t: 0.00, d: 0.12 }, // C5
+          { f: 659.25, t: 0.14, d: 0.12 }, // E5
+          { f: 783.99, t: 0.28, d: 0.12 }, // G5
+          { f: 1046.5, t: 0.42, d: 0.20 }  // C6
+        ];
+
+        const master = ctx.createGain();
+        master.gain.setValueAtTime(0.0001, now);
+        master.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+        master.connect(ctx.destination);
+
+        notes.forEach(n => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(n.f, now + n.t);
+          g.gain.setValueAtTime(0.0001, now + n.t);
+          g.gain.exponentialRampToValueAtTime(0.9, now + n.t + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + n.t + n.d);
+
+          osc.connect(g);
+          g.connect(master);
+          osc.start(now + n.t);
+          osc.stop(now + n.t + n.d + 0.05);
+        });
+
+        // auto close
+        setTimeout(() => ctx.close().catch(()=>{}), 1400);
+      } catch (_) { /* ignore */ }
+    }
+
+    function triggerFlagWinFanfare() {
+      triggerConfettiBurst();
+      playFlagFanfare();
+    }
+
+    /*****************************************************************
+     *  MOVEMENT & COMBAT
+     *****************************************************************/
     function canPieceMove(board, piece, fromRow, fromCol, toRow, toCol) {
       if (!inBounds(toRow,toCol)) return {ok:false, reason:"off-board"};
       if (!PIECE_CONFIG[piece.type].canMove) return {ok:false, reason:"piece cannot move"};
@@ -560,42 +730,60 @@
 
     function resolveCombat(board, attacker, fromRow, fromCol, toRow, toCol) {
       const defender = board[toRow][toCol];
-      if (!defender) { board[toRow][toCol]=attacker; board[fromRow][fromCol]=null; return {board,winnerPlayerId:null}; }
 
+      // No defender: just move
+      if (!defender) {
+        board[toRow][toCol]=attacker;
+        board[fromRow][fromCol]=null;
+        return {board,winnerPlayerId:null};
+      }
+
+      // Bomb
       if (defender.type===PieceType.BOMB) {
-        triggerExplosionEffect(toRow,toCol); triggerExplosionEffect(fromRow,fromCol);
+        triggerExplosionEffect(toRow,toCol);
+        triggerExplosionEffect(fromRow,fromCol);
+
         if (attacker.type===PieceType.MAJOR) {
           attacker.revealed=true;
           recordPieceCaptured(attacker.owner, defender);
-          board[toRow][toCol]=attacker; board[fromRow][fromCol]=null;
+          board[toRow][toCol]=attacker;
+          board[fromRow][fromCol]=null;
           return {board,winnerPlayerId:null};
         } else {
           recordPieceCaptured(attacker.owner, defender);
           recordPieceCaptured(defender.owner, attacker);
-          board[toRow][toCol]=null; board[fromRow][fromCol]=null;
+          board[toRow][toCol]=null;
+          board[fromRow][fromCol]=null;
           return {board,winnerPlayerId:null};
         }
       }
 
+      // Flag capture = win
       if (defender.type===PieceType.FLAG) {
         attacker.revealed=true;
         recordPieceCaptured(attacker.owner, defender);
-        board[toRow][toCol]=attacker; board[fromRow][fromCol]=null;
+        board[toRow][toCol]=attacker;
+        board[fromRow][fromCol]=null;
         return {board,winnerPlayerId:attacker.owner};
       }
 
+      // Spy vs Spy -> double agent
       if (attacker.type===PieceType.SPY && defender.type===PieceType.SPY) {
-        attacker.revealed=true; defender.revealed=true;
+        attacker.revealed=true;
+        defender.revealed=true;
         defender.owner = attacker.owner;
         board[toRow][toCol]=defender;
         triggerSpyConvertEffect(toRow,toCol);
         return {board,winnerPlayerId:null};
       }
 
+      // Rank combat (attacker wins ties)
       if (attacker.rank >= defender.rank) {
-        attacker.revealed=true; defender.revealed=true;
+        attacker.revealed=true;
+        defender.revealed=true;
         recordPieceCaptured(attacker.owner, defender);
-        board[toRow][toCol]=attacker; board[fromRow][fromCol]=null;
+        board[toRow][toCol]=attacker;
+        board[fromRow][fromCol]=null;
         return {board,winnerPlayerId:null};
       } else {
         defender.revealed=true;
@@ -610,6 +798,7 @@
       const piece=board[fromRow][fromCol];
       if (!piece) return {ok:false, reason:"no piece at source"};
       if (piece.owner!==currentPlayerId) return {ok:false, reason:"not your piece"};
+
       const check=canPieceMove(board,piece,fromRow,fromCol,toRow,toCol);
       if (!check.ok) return {ok:false, reason:check.reason};
 
@@ -618,6 +807,9 @@
       return {ok:true, board:res.board, winnerPlayerId:res.winnerPlayerId};
     }
 
+    /*****************************************************************
+     *  FIRESTORE SYNC HELPERS
+     *****************************************************************/
     function serializeBoard(board){
       const flat=[];
       for(let r=0;r<BOARD_ROWS;r++) for(let c=0;c<BOARD_COLS;c++){
@@ -699,11 +891,14 @@
       }
 
       updateStatus();
-      updatePieceSelect(); // important
+      updatePieceSelect();
       renderBoardPieces();
       updateLastMoveHighlights();
     }
 
+    /*****************************************************************
+     *  CREATE / JOIN GAME
+     *****************************************************************/
     async function createGame() {
       myPlayerName = playerNameInputEl.value.trim() || "Player 1";
       myPlayerId = "P1";
@@ -799,6 +994,9 @@
       joinGame();
     });
 
+    /*****************************************************************
+     *  UI: RENDERING, CLICK HANDLING
+     *****************************************************************/
     function renderBoardPieces() {
       for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) {
         const cell=document.getElementById(`cell-${r}-${c}`);
@@ -808,6 +1006,7 @@
         const piece=boardPieces[r][c];
         if (!piece) continue;
 
+        // During setup, only show my pieces
         if (phase==="setup" && piece.owner!==myPlayerId) continue;
 
         const cfg=PIECE_CONFIG[piece.type];
@@ -824,62 +1023,23 @@
       }
     }
 
-    function formatCounts(countMap) {
-      const parts=[];
-      for (const type of PIECE_ORDER) {
-        const count = Number(countMap?.[type] || 0);
-        if (count>0) {
-          const cfg=PIECE_CONFIG[type];
-          parts.push(`${cfg.label}${cfg.rank}×${count}`);
-        }
-      }
-      return parts.length ? parts.join(", ") : "none yet.";
-    }
-
-    function updateCapturedSummary() {
-      const myCaptures = capturedBy[myPlayerId];
-      if (!myCaptures) { capturedSummaryEl.textContent=""; return; }
-      const parts=[];
-      for (const type of PIECE_ORDER) {
-        const count = Number(myCaptures[type] || 0);
-        if (count>0) {
-          const cfg=PIECE_CONFIG[type];
-          parts.push(`${cfg.label}${cfg.rank}×${count}`);
-        }
-      }
-      capturedSummaryEl.textContent = parts.length ? ("Pieces you have captured: " + parts.join(", ")) : "Pieces you have captured: none yet.";
-    }
-
-    function updateGraveyards() {
-      const p1Name = playerNames.P1 || "Player 1";
-      const p2Name = playerNames.P2 || "Player 2";
-      graveyardP1LabelEl.textContent = `Removed from ${p1Name}:`;
-      graveyardP2LabelEl.textContent = `Removed from ${p2Name}:`;
-      graveyardP1TextEl.textContent = formatCounts(capturedBy.P2);
-      graveyardP2TextEl.textContent = formatCounts(capturedBy.P1);
-    }
-
     function updateStatus() {
       const currentName = playerNames[currentPlayer] || (currentPlayer==="P1"?"Player 1":"Player 2");
       if (phase==="setup") gameStatusEl.textContent = `Setup: ${currentName} — place your pieces on your side.`;
       else if (phase==="play") gameStatusEl.textContent = `Play: ${currentName}'s turn.`;
       currentPlayerLabelEl.textContent = currentName;
-      updateCapturedSummary();
       updateGraveyards();
     }
 
-    // ✅ Force the <select> to visually refresh immediately on all browsers
     function forceSelectRerender(sel) {
-      // This “toggle display” trick forces a repaint (fixes the “still shows exhausted item” bug).
       const oldDisplay = sel.style.display;
       sel.style.display = 'none';
-      // read layout
       void sel.offsetHeight;
       sel.style.display = oldDisplay || '';
       sel.blur();
     }
 
-    // ✅ #3: hide exhausted types + auto-advance selection + force repaint
+    // Hide exhausted types + auto-advance selection + repaint
     function updatePieceSelect() {
       const rem = remainingPieces[currentPlayer];
       const prev = pieceSelectEl.value;
@@ -904,13 +1064,9 @@
       pieceSelectEl.disabled = false;
 
       const hasPrev = Array.from(pieceSelectEl.options).some(o => o.value === prev);
-      if (prev && hasPrev) {
-        pieceSelectEl.value = prev;
-      } else {
-        pieceSelectEl.selectedIndex = 0; // auto-advance immediately
-      }
+      if (prev && hasPrev) pieceSelectEl.value = prev;
+      else pieceSelectEl.selectedIndex = 0;
 
-      // repaint so the UI updates without the user clicking the dropdown
       forceSelectRerender(pieceSelectEl);
     }
 
@@ -951,6 +1107,62 @@
 
     function ownerLabel(ownerId){ return playerNames[ownerId] || (ownerId==="P1"?"Player 1":"Player 2"); }
 
+    /*****************************************************************
+     *  GRAVEYARD (ICON CHIPS)
+     *****************************************************************/
+    function buildChip(labelText, count, ownerId, type) {
+      const chip = document.createElement('div');
+      chip.classList.add('gy-chip', ownerId);
+      if (type === PieceType.FLAG) chip.classList.add('flag');
+      if (type === PieceType.BOMB) chip.classList.add('bomb');
+      chip.textContent = labelText;
+
+      const badge = document.createElement('div');
+      badge.classList.add('gy-badge');
+      badge.textContent = String(count);
+      chip.appendChild(badge);
+
+      return chip;
+    }
+
+    function renderGraveyardChips(container, capturedMap, removedFromOwnerId) {
+      container.innerHTML = "";
+
+      let any = false;
+      for (const type of PIECE_ORDER) {
+        const count = Number(capturedMap?.[type] || 0);
+        if (count <= 0) continue;
+        any = true;
+
+        const cfg = PIECE_CONFIG[type];
+        const label = cfg.label + cfg.rank; // e.g. G5, S3
+        container.appendChild(buildChip(label, count, removedFromOwnerId, type));
+      }
+
+      if (!any) {
+        const empty = document.createElement('div');
+        empty.className = 'gy-empty';
+        empty.textContent = "none yet.";
+        container.appendChild(empty);
+      }
+    }
+
+    function updateGraveyards() {
+      const p1Name = playerNames.P1 || "Player 1";
+      const p2Name = playerNames.P2 || "Player 2";
+      graveyardP1LabelEl.textContent = `Removed from ${p1Name}:`;
+      graveyardP2LabelEl.textContent = `Removed from ${p2Name}:`;
+
+      // Removed from P1 = what P2 has captured
+      renderGraveyardChips(graveyardP1ChipsEl, capturedBy.P2, "P1");
+
+      // Removed from P2 = what P1 has captured
+      renderGraveyardChips(graveyardP2ChipsEl, capturedBy.P1, "P2");
+    }
+
+    /*****************************************************************
+     *  BOARD CLICK HANDLING
+     *****************************************************************/
     function onBoardClick(e) {
       const cell=e.target.closest('.cell');
       if (!cell) return;
@@ -979,7 +1191,7 @@
         boardPieces[row][col]=null;
 
         renderBoardPieces();
-        updatePieceSelect();     // ✅ will re-add type and repaint
+        updatePieceSelect();
         updatePieceCounts();
 
         infoEl.textContent = `Removed ${existing.type} from ${coordLabel(row,col)}.`;
@@ -1008,7 +1220,7 @@
       remainingPieces[currentPlayer][type] = Number(remainingPieces[currentPlayer][type] ?? 0) - 1;
 
       renderBoardPieces();
-      updatePieceSelect();   // ✅ if flag just hit 0, it disappears instantly + repaint
+      updatePieceSelect();
       updatePieceCounts();
 
       infoEl.textContent = `Placed ${type} at ${coordLabel(row,col)}.`;
@@ -1075,26 +1287,39 @@
         }
       }
 
+      updateGraveyards(); // keep in sync locally right away
+
       if (result.winnerPlayerId) {
         phase="gameOver";
-        for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) if (boardPieces[r][c]) boardPieces[r][c].revealed=true;
+
+        // Fanfare!
+        triggerFlagWinFanfare();
+
+        // Reveal all pieces at game end
+        for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) {
+          if (boardPieces[r][c]) boardPieces[r][c].revealed = true;
+        }
         renderBoardPieces();
 
         const winnerLabel = playerNames[result.winnerPlayerId] || (result.winnerPlayerId==="P1"?"Player 1":"Player 2");
         gameStatusEl.textContent = `Game over! ${winnerLabel} wins by capturing the flag!`;
         infoEl.textContent = baseMessage;
         setupControlsEl.style.display="none";
+
         syncGameStateToFirestore({ winner: result.winnerPlayerId, statusMessage: baseMessage });
         return;
       }
 
+      // Turn switching + no-move continuation (your #1 rule)
       const proposedNext = currentPlayer==="P1" ? "P2" : "P1";
 
       if (!hasAnyLegalMove(proposedNext)) {
         const currentStillHasMoves = hasAnyLegalMove(currentPlayer);
         if (!currentStillHasMoves) {
           phase="gameOver";
-          for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) if (boardPieces[r][c]) boardPieces[r][c].revealed=true;
+          for (let r=0;r<BOARD_ROWS;r++) for (let c=0;c<BOARD_COLS;c++) {
+            if (boardPieces[r][c]) boardPieces[r][c].revealed=true;
+          }
           renderBoardPieces();
 
           const statusMessage = `${baseMessage} Stalemate! Neither player has a legal move. It's a tie.`;
@@ -1153,6 +1378,9 @@
     finishSetupBtn.addEventListener('click', onFinishSetupClick);
     boardEl.addEventListener('click', onBoardClick);
 
+    /*****************************************************************
+     *  INIT
+     *****************************************************************/
     function init() {
       phase="setup";
       currentPlayer="P1";
@@ -1163,7 +1391,7 @@
 
       updateLastMoveHighlights();
       updateStatus();
-      updatePieceSelect();   // ✅ initial build
+      updatePieceSelect();
       updatePieceCounts();
       renderBoardPieces();
       infoEl.textContent="Player 1: place your pieces on rows 1–5. Click again on a piece to remove it.";
